@@ -17,6 +17,14 @@
 
 避坑提示：OrangePi 供电按官方规格给足电流并与电机电源隔离；相机一律走 USB。
 
+## 物理规格（默认设计，详见 [docs/mechanical.md](docs/mechanical.md)）
+
+- 场地：3m × 3m 室内硬地面，取货区 / 投递区 / 充电桩位三个功能点
+- 标准货箱：120 × 120 × 100 mm，≤500 g
+- 货架：托盘台面 160 × 160 mm，腿高 140 mm（净空 130 mm 供车钻入），RFID 卡贴托盘底面中心
+- 车体：甲板 200 × 160 mm，Ø85 轮 ×4，整车最高点 ≤115 mm；顶升行程 50 mm
+- 雷达车头低位安装（~90 mm，低于货架净空）；相机立杆为二期臂版专用
+
 ## 采购清单（一期）
 
 | 部件 | 建议型号 | 参考价 |
@@ -53,9 +61,43 @@
 ## 仓库结构
 
 ```
-ros2_ws/        # ROS2 工作空间（待搭建）
-firmware/ra8/   # RA8 下位机固件（待搭建）
-docs/           # 接线表、串口协议等文档
+ros2_ws/src/
+  pickup_description/   # URDF/xacro 模型 + robot_state_publisher launch
+  motor_bridge/         # OrangePi ↔ RA8 串口桥（cmd_vel / odom / imu / rfid / 顶升）
+  lift_controller/      # 顶升平台 /lift/set 服务
+  aruco_detect/         # ArUco 标记识别（二期货物位姿）
+  task_orchestrator/    # 任务状态机：接单 → 取 → 送 → 回
+  pickup_bringup/       # 整车 bringup launch + EKF / SLAM 配置
+firmware/ra8/           # RA8 固件：protocol.h + 搭建指引
+docs/                   # mechanical.md（尺寸设计）、serial_protocol.md、wiring.md
+```
+
+## 快速开始（OrangePi 上）
+
+```bash
+# 1. 安装依赖（Ubuntu 22.04 + ROS2 Humble）
+sudo apt install ros-humble-robot-localization ros-humble-slam-toolbox \
+  ros-humble-nav2-bringup ros-humble-nav2-simple-commander \
+  ros-humble-cv-bridge python3-serial python3-opencv
+
+# 2. 编译
+cd ros2_ws && colcon build && source install/setup.bash
+
+# 3. 点亮底盘（键盘遥控）
+ros2 launch pickup_bringup bringup.launch.py serial_port:=/dev/ttyUSB0
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+
+# 4. 建图与导航（雷达驱动用 YDLIDAR 官方包）
+ros2 launch ydlidar_ros2_driver ydlidar_launch.py
+ros2 launch slam_toolbox online_async_launch.py \
+  params_file:=install/pickup_bringup/share/pickup_bringup/config/slam_toolbox.yaml
+ros2 launch nav2_bringup navigation_launch.py map:=/path/to/map.yaml
+
+# 5. 跑一次取送闭环（站点坐标先在 RViz 里量好）
+ros2 run task_orchestrator orchestrator_node --ros-args \
+  -p home_pose:="[0.0, 0.0, 0.0]" -p pickup_pose:="[1.0, 0.0, 0.0]" \
+  -p deliver_pose:="[0.0, 1.0, 0.0]"
+ros2 topic pub --once /start_delivery std_msgs/msg/Bool "{data: true}"
 ```
 
 ## 推进路线

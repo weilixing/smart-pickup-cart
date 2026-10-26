@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>pickup_bringup</name>
+  <version>0.1.0</version>
+  <description>整车 bringup launch 与配置（EKF / SLAM）</description>
+  <maintainer email="lixing@example.com">lixing</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>pickup_description</exec_depend>
+  <exec_depend>motor_bridge</exec_depend>
+  <exec_depend>lift_controller</exec_depend>
+  <exec_depend>robot_localization</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
