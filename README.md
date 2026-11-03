@@ -69,7 +69,7 @@ ros2_ws/src/
   task_orchestrator/    # 任务状态机：接单 → 取 → 送 → 回
   pickup_bringup/       # 整车 bringup launch + EKF / SLAM 配置
 firmware/ra8/           # RA8 固件：protocol.h + 搭建指引
-docs/                   # mechanical.md（尺寸设计）、serial_protocol.md、wiring.md
+docs/                   # 开题报告.md、mechanical.md（尺寸设计）、serial_protocol.md、wiring.md
 ```
 
 ## 快速开始（OrangePi 上）
