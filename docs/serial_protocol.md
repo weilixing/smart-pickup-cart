@@ -1,40 +1,30 @@
-# OrangePi ↔ RA8 串口协议
+# OrangePi ↔ RA8 串口协议（循迹 / 避障 / 机械臂 / 语音版）
 
-- 链路：UART，115200 8N1，3.3V 电平（经 USB-TTL 或板间直连，**必须共地**）
-- 方向：OrangePi（ROS2 `motor_bridge` 节点）⇄ RA8 固件
-- 整数一律小端（little-endian）
+- 链路：UART，115200 8N1，3.3V，**必须共地**  
+- 整数：小端  
+- 帧：`[0xAA, 0x55, CMD, LEN, PAYLOAD..., CRC]`  
+- `CRC` = 从 CMD 到 PAYLOAD 末尾逐字节 XOR  
 
-## 帧格式
-
-```
-+--------+--------+-----+-----+==========+-----+
-| 0xAA   | 0x55   | CMD | LEN | PAYLOAD  | CRC |
-+--------+--------+-----+-----+==========+-----+
-   1B       1B      1B    1B     LEN B     1B
-```
-
-- `LEN` = PAYLOAD 字节数（0~255）
-- `CRC` = 从 CMD 到 PAYLOAD 末尾所有字节逐字节 XOR
-
-## 命令字
-
-### 下行（OrangePi → RA8）
+## 下行（OrangePi → RA8）
 
 | CMD | 名称 | PAYLOAD | 说明 |
 | --- | --- | --- | --- |
-| 0x01 | SET_VEL | int16 linear_mm_s + int16 angular_mrad_s | 目标线速度（mm/s）与角速度（mrad/s），20Hz 周期发送 |
-| 0x02 | LIFT_CMD | uint8 state（0=降，1=升） | 顶升平台目标状态 |
-| 0x03 | HEARTBEAT | 空 | 1Hz 心跳；RA8 连续 500ms 未收到任何下行帧则急停电机 |
+| 0x01 | SET_MODE | uint8 mode | 0=停止，1=遥控，2=循迹任务，3=急停 |
+| 0x02 | SET_VEL | int16 linear_mm_s + int16 angular_mrad_s | 遥控模式下的目标速度，20 Hz |
+| 0x03 | HEARTBEAT | 空 | 1 Hz；RA8 连续 500 ms 无下行帧则急停 |
+| 0x10 | ARM_SEQ | uint8 seq_id | 0=回零，1=抓取序列，2=投放序列 |
+| 0x11 | ARM_JOINT | uint8 joint + uint16 angle_deg×10 | 单关节调试（joint 0–3） |
+| 0x20 | VOICE_PLAY | uint8 index 或 UTF-8 文本（LEN 可变） | index 模式：预置提示语编号；文本模式见固件 |
 
-### 上行（RA8 → OrangePi）
+## 上行（RA8 → OrangePi）
 
 | CMD | 名称 | PAYLOAD | 说明 |
 | --- | --- | --- | --- |
-| 0x81 | ODOM | int32 x_mm + int32 y_mm + int32 theta_mrad + int16 v_mm_s + int16 w_mrad_s | MCU 侧积分的里程计，50Hz |
-| 0x82 | LIFT_STATE | uint8 state（0=已降下，1=已升起，2=运动中） | 到位后上报 |
-| 0x84 | RFID | 12B ASCII（十六进制 UID 字符串，不足补 0x00） | 读到标签时上报一次 |
-| 0x85 | IMU | int16 ax_mg + int16 ay_mg + int16 az_mg + int16 gz_cdps | 加速度（mg）与 Z 轴角速度（0.01°/s），100Hz |
+| 0x81 | ODOM | int32 x_mm + int32 y_mm + int32 theta_mrad + int16 v + int16 w | 50 Hz |
+| 0x82 | LINE_STATUS | int16 error_mm + uint8 on_line + uint8 station | 循迹偏差、是否在线、站点标志 |
+| 0x83 | OBSTACLE | uint16 front_mm + uint16 left_mm + uint16 right_mm + uint8 state | state：0正常 1减速 2绕行 |
+| 0x84 | ARM_STATE | uint8 busy + uint8 last_seq + uint8 ok | 机械臂忙闲与上次序列结果 |
+| 0x85 | VOICE_DONE | uint8 index | 播报完成 |
+| 0x86 | IMU | int16 ax + ay + az + gz | 可选 |
 
-> 里程计由 MCU 积分是 v1 取舍；后续可改为上报原始编码器 tick，由 ROS 侧 `robot_localization` 融合。
-
-对应固件头文件见 `firmware/ra8/protocol.h`，ROS 侧解析见 `ros2_ws/src/motor_bridge/motor_bridge/protocol.py`。
+对应实现：`firmware/ra8/protocol.h`、`ros2_ws/src/motor_bridge/motor_bridge/protocol.py`。

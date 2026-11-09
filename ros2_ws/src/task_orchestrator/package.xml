@@ -2,15 +2,12 @@
 <package format="3">
   <name>task_orchestrator</name>
   <version>0.1.0</version>
-  <description>任务状态机：接单 → 取货 → 投递 → 返回</description>
-  <maintainer email="lixing@example.com">lixing</maintainer>
+  <description>任务状态机：循迹→抓取→投放→返航（含语音节点）</description>
+  <maintainer email="weilixing@example.com">weilixing</maintainer>
   <license>MIT</license>
-
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
-  <exec_depend>nav2_simple_commander</exec_depend>
-
   <export>
     <build_type>ament_python</build_type>
   </export>

@@ -1,20 +1,27 @@
-"""OrangePi 与 RA8 的串口帧编解码，协议定义见 docs/serial_protocol.md。"""
+"""OrangePi 与 RA8 的串口帧编解码，见 docs/serial_protocol.md。"""
 
 import struct
 
 HEADER = b"\xaa\x55"
 
-CMD_SET_VEL = 0x01
-CMD_LIFT_CMD = 0x02
+CMD_SET_MODE = 0x01
+CMD_SET_VEL = 0x02
 CMD_HEARTBEAT = 0x03
+CMD_ARM_SEQ = 0x10
+CMD_ARM_JOINT = 0x11
+CMD_VOICE = 0x20
 
 CMD_ODOM = 0x81
-CMD_LIFT_STATE = 0x82
-CMD_RFID = 0x84
-CMD_IMU = 0x85
+CMD_LINE = 0x82
+CMD_OBSTACLE = 0x83
+CMD_ARM_STATE = 0x84
+CMD_VOICE_DONE = 0x85
+CMD_IMU = 0x86
 
 ODOM_STRUCT = struct.Struct("<iii hh")
-IMU_STRUCT = struct.Struct("<hhhh")
+LINE_STRUCT = struct.Struct("<hBB")
+OBSTACLE_STRUCT = struct.Struct("<HHHB")
+ARM_STATE_STRUCT = struct.Struct("<BBB")
 
 
 def _crc8(data: bytes) -> int:
@@ -29,18 +36,28 @@ def pack_frame(cmd: int, payload: bytes = b"") -> bytes:
     return HEADER + body + bytes([_crc8(body)])
 
 
+def pack_set_mode(mode: int) -> bytes:
+    return pack_frame(CMD_SET_MODE, bytes([mode & 0xFF]))
+
+
 def pack_set_vel(linear_mm_s: int, angular_mrad_s: int) -> bytes:
     return pack_frame(CMD_SET_VEL, struct.pack("<hh", linear_mm_s, angular_mrad_s))
 
 
-def pack_lift_cmd(up: bool) -> bytes:
-    return pack_frame(CMD_LIFT_CMD, bytes([1 if up else 0]))
+def pack_heartbeat() -> bytes:
+    return pack_frame(CMD_HEARTBEAT)
+
+
+def pack_arm_seq(seq_id: int) -> bytes:
+    return pack_frame(CMD_ARM_SEQ, bytes([seq_id & 0xFF]))
+
+
+def pack_voice_index(index: int) -> bytes:
+    return pack_frame(CMD_VOICE, bytes([index & 0xFF]))
 
 
 class FrameParser:
-    """增量式帧解析器：feed() 任意字节流，返回 (cmd, payload) 列表。"""
-
-    MIN_FRAME = 5  # 2 头 + CMD + LEN + CRC
+    """增量式帧解析器。"""
 
     def __init__(self) -> None:
         self._buf = bytearray()
@@ -57,7 +74,6 @@ class FrameParser:
     def _next_frame(self):
         start = self._buf.find(HEADER)
         if start < 0:
-            # 保留可能的半个帧头（末尾出现 0xAA）
             keep = 1 if self._buf.endswith(b"\xaa") else 0
             del self._buf[: len(self._buf) - keep]
             return None
@@ -73,5 +89,5 @@ class FrameParser:
         crc = self._buf[total - 1]
         del self._buf[:total]
         if _crc8(body) != crc:
-            return None  # CRC 错：丢弃帧头，重新同步
+            return None
         return body[0], body[2:]

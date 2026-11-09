@@ -1,8 +1,8 @@
 /*
- * OrangePi <-> RA8 串口协议（与 ros2_ws/src/motor_bridge/motor_bridge/protocol.py 对应）
- * 协议文档：docs/serial_protocol.md
+ * OrangePi <-> RA8 串口协议（与 ros2_ws/.../protocol.py 对应）
+ * 文档：docs/serial_protocol.md
  *
- * 帧格式：[0xAA, 0x55, CMD, LEN, PAYLOAD..., CRC]
+ * 帧：[0xAA, 0x55, CMD, LEN, PAYLOAD..., CRC]
  * CRC = 从 CMD 到 PAYLOAD 末尾逐字节 XOR；多字节整数小端。
  */
 #pragma once
@@ -12,16 +12,21 @@
 #define PROTO_HEADER0 0xAAu
 #define PROTO_HEADER1 0x55u
 
-/* 下行（OrangePi -> RA8） */
-#define PROTO_CMD_SET_VEL   0x01u /* int16 linear_mm_s + int16 angular_mrad_s */
-#define PROTO_CMD_LIFT_CMD  0x02u /* uint8: 0=降, 1=升 */
-#define PROTO_CMD_HEARTBEAT 0x03u /* 空；500ms 无任何下行帧则急停 */
+/* 下行 */
+#define PROTO_CMD_SET_MODE  0x01u /* uint8: 0停 1遥控 2循迹任务 3急停 */
+#define PROTO_CMD_SET_VEL   0x02u /* int16 linear_mm_s + int16 angular_mrad_s */
+#define PROTO_CMD_HEARTBEAT 0x03u
+#define PROTO_CMD_ARM_SEQ   0x10u /* uint8 seq_id: 0回零 1抓取 2投放 */
+#define PROTO_CMD_ARM_JOINT 0x11u /* uint8 joint + uint16 angle_cdeg */
+#define PROTO_CMD_VOICE     0x20u /* uint8 index 或 UTF-8 文本 */
 
-/* 上行（RA8 -> OrangePi） */
-#define PROTO_CMD_ODOM       0x81u /* proto_odom_t，50Hz */
-#define PROTO_CMD_LIFT_STATE 0x82u /* uint8: 0=已降下, 1=已升起, 2=运动中 */
-#define PROTO_CMD_RFID       0x84u /* 12B ASCII UID，不足补 0 */
-#define PROTO_CMD_IMU        0x85u /* proto_imu_t，100Hz */
+/* 上行 */
+#define PROTO_CMD_ODOM       0x81u
+#define PROTO_CMD_LINE       0x82u
+#define PROTO_CMD_OBSTACLE   0x83u
+#define PROTO_CMD_ARM_STATE  0x84u
+#define PROTO_CMD_VOICE_DONE 0x85u
+#define PROTO_CMD_IMU        0x86u
 
 typedef struct __attribute__((packed)) {
     int32_t x_mm;
@@ -32,11 +37,23 @@ typedef struct __attribute__((packed)) {
 } proto_odom_t;
 
 typedef struct __attribute__((packed)) {
-    int16_t ax_mg;    /* 加速度，单位 mg */
-    int16_t ay_mg;
-    int16_t az_mg;
-    int16_t gz_cdps;  /* Z 轴角速度，单位 0.01 dps */
-} proto_imu_t;
+    int16_t error_mm;
+    uint8_t on_line;
+    uint8_t station;
+} proto_line_t;
+
+typedef struct __attribute__((packed)) {
+    uint16_t front_mm;
+    uint16_t left_mm;
+    uint16_t right_mm;
+    uint8_t state; /* 0正常 1减速 2绕行 */
+} proto_obstacle_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t busy;
+    uint8_t last_seq;
+    uint8_t ok;
+} proto_arm_state_t;
 
 static inline uint8_t proto_crc8(const uint8_t *data, uint16_t len)
 {
@@ -47,7 +64,6 @@ static inline uint8_t proto_crc8(const uint8_t *data, uint16_t len)
     return crc;
 }
 
-/* 打包一帧到 out（out 至少 len + 5 字节），返回帧总长度 */
 static inline uint16_t proto_pack(uint8_t cmd, const uint8_t *payload, uint8_t len, uint8_t *out)
 {
     out[0] = PROTO_HEADER0;

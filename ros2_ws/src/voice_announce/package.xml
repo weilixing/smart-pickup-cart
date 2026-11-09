@@ -1,15 +1,13 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>lift_controller</name>
+  <name>voice_announce</name>
   <version>0.1.0</version>
-  <description>顶升平台控制：/lift/set 服务（升/降），等待 RA8 到位反馈</description>
-  <maintainer email="lixing@example.com">lixing</maintainer>
+  <description>关键节点语音播报调度（经串口下发 SYN6288 预置语索引）</description>
+  <maintainer email="weilixing@example.com">weilixing</maintainer>
   <license>MIT</license>
-
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
-
   <export>
     <build_type>ament_python</build_type>
   </export>

@@ -1,141 +1,140 @@
-import math
 from enum import Enum, auto
 
 import rclpy
-from geometry_msgs.msg import PoseStamped
-from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.node import Node
-from std_msgs.msg import Bool, String
-from std_srvs.srv import SetBool
+from std_msgs.msg import Bool, String, UInt8
+from std_srvs.srv import Trigger
 
 
 class State(Enum):
     IDLE = auto()
-    NAV_TO_PICKUP = auto()
-    CONFIRM_RFID = auto()
-    LIFT_UP = auto()
-    NAV_TO_DELIVER = auto()
-    LIFT_DOWN = auto()
-    NAV_HOME = auto()
+    LINE_TO_PICKUP = auto()
+    WAIT_ANNOUNCE = auto()
+    PICK = auto()
+    LINE_TO_DROP = auto()
+    PLACE = auto()
+    LINE_HOME = auto()
     DONE = auto()
     FAILED = auto()
 
 
 class Orchestrator(Node):
-    """完整闭环：/start_delivery 触发 → 取货点 → RFID 确认 → 顶升 → 投递点 → 放下 → 回家。
+    """闭环：循迹取货点 → 播报 → 抓取 → 投放点 → 投放 → 返航。
 
-    三个站点坐标（map 系）通过参数配置：home_pose / pickup_pose / deliver_pose，
-    格式 [x, y, yaw_deg]，建图后用 RViz 的 "2D Pose Estimate" 在目标点读取。
+    /line/station：1=取货点，2=投放点，3=出发点。
     """
+
+    STATION_PICKUP = 1
+    STATION_DROP = 2
+    STATION_HOME = 3
 
     def __init__(self) -> None:
         super().__init__("orchestrator")
-        self.declare_parameter("home_pose", [0.0, 0.0, 0.0])
-        self.declare_parameter("pickup_pose", [1.0, 0.0, 0.0])
-        self.declare_parameter("deliver_pose", [0.0, 1.0, 0.0])
-        self.declare_parameter("expected_rfid", "")  # 空串 = 接受任意标签
-        self.declare_parameter("rfid_timeout", 10.0)
-
-        self._navigator = BasicNavigator()
-        self._lift_client = self.create_client(SetBool, "lift/set")
+        self._mode_pub = self.create_publisher(UInt8, "mcu/mode", 10)
+        self._voice_pub = self.create_publisher(String, "voice/say", 10)
         self.create_subscription(Bool, "start_delivery", self._on_start, 10)
-        self.create_subscription(String, "rfid_id", self._on_rfid, 10)
+        self.create_subscription(UInt8, "line/station", self._on_station, 10)
+        self.create_subscription(UInt8, "voice/done", self._on_voice_done, 10)
+
+        self._arm_pick = self.create_client(Trigger, "arm/pick")
+        self._arm_place = self.create_client(Trigger, "arm/place")
 
         self._state = State.IDLE
-        self._last_rfid = None
-        self._lift_future = None
-        self._nav_ready = False
+        self._station = 0
+        self._pending_after_voice = None
+        self._arm_future = None
         self.create_timer(0.2, self._tick)
-        self.get_logger().info("就绪：向 /start_delivery 发 true 开始一次取送演示")
-
-    def _make_pose(self, values) -> PoseStamped:
-        pose = PoseStamped()
-        pose.header.frame_id = "map"
-        pose.header.stamp = self.get_clock().now().to_msg()
-        pose.pose.position.x = values[0]
-        pose.pose.position.y = values[1]
-        half = math.radians(values[2]) / 2.0
-        pose.pose.orientation.z = math.sin(half)
-        pose.pose.orientation.w = math.cos(half)
-        return pose
+        self.get_logger().info("就绪：向 /start_delivery 发 true 开始取货闭环")
 
     def _on_start(self, msg: Bool) -> None:
         if msg.data and self._state == State.IDLE:
-            self.get_logger().info("收到订单，出发去取货点")
-            self._goto("pickup_pose", State.NAV_TO_PICKUP)
+            self.get_logger().info("出发：循迹前往取货点")
+            self._station = 0
+            self._mode_pub.publish(UInt8(data=2))
+            self._state = State.LINE_TO_PICKUP
 
-    def _on_rfid(self, msg: String) -> None:
-        self._last_rfid = msg.data
+    def _on_station(self, msg: UInt8) -> None:
+        self._station = int(msg.data)
 
-    def _goto(self, param: str, state: State) -> None:
-        if not self._nav_ready:
-            self.get_logger().info("等待 Nav2 激活……")
-            self._navigator.waitUntilNav2Active()
-            self._nav_ready = True
-        pose = self._make_pose(self.get_parameter(param).value)
-        self._navigator.goToPose(pose)
-        self._state = state
+    def _on_voice_done(self, _msg: UInt8) -> None:
+        if self._state == State.WAIT_ANNOUNCE and self._pending_after_voice:
+            nxt = self._pending_after_voice
+            self._pending_after_voice = None
+            nxt()
 
-    def _nav_done(self) -> bool:
-        if self._navigator.isTaskComplete():
-            result = self._navigator.getResult()
-            if result != TaskResult.SUCCEEDED:
-                self.get_logger().error(f"导航失败：{result}")
-                self._state = State.FAILED
-            return True
-        return False
+    def _say(self, key: str) -> None:
+        self._voice_pub.publish(String(data=key))
 
-    def _call_lift(self, up: bool) -> None:
-        if not self._lift_client.wait_service(timeout_sec=2.0):
-            self.get_logger().error("/lift/set 服务不可用")
-            self._state = State.FAILED
+    def _call_arm(self, client) -> None:
+        if not client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error("机械臂服务不可用")
+            self._fail()
             return
-        self._lift_future = self._lift_client.call_async(SetBool.Request(data=up))
+        self._arm_future = client.call_async(Trigger.Request())
 
-    def _lift_done(self) -> bool:
-        if self._lift_future is None or not self._lift_future.done():
+    def _arm_done(self) -> bool:
+        if self._arm_future is None or not self._arm_future.done():
             return False
-        if not self._lift_future.result().success:
-            self.get_logger().error("顶升动作失败")
-            self._state = State.FAILED
+        result = self._arm_future.result()
+        self._arm_future = None
+        if not result.success:
+            self.get_logger().error(result.message)
+            self._fail()
             return False
-        self._lift_future = None
         return True
 
+    def _fail(self) -> None:
+        self._mode_pub.publish(UInt8(data=3))
+        self._state = State.FAILED
+
+    def _start_pick(self) -> None:
+        self.get_logger().info("开始抓取")
+        self._call_arm(self._arm_pick)
+        self._state = State.PICK
+
+    def _start_place(self) -> None:
+        self.get_logger().info("开始投放")
+        self._call_arm(self._arm_place)
+        self._state = State.PLACE
+
     def _tick(self) -> None:
-        if self._state == State.NAV_TO_PICKUP and self._nav_done():
-            if self._state == State.NAV_TO_PICKUP:
-                self.get_logger().info("到达取货点，等待 RFID 确认")
-                self._last_rfid = None
-                self._state = State.CONFIRM_RFID
+        if self._state == State.LINE_TO_PICKUP and self._station == self.STATION_PICKUP:
+            self._mode_pub.publish(UInt8(data=0))
+            self._pending_after_voice = self._start_pick
+            self._say("arrive_pickup")
+            self._state = State.WAIT_ANNOUNCE
 
-        elif self._state == State.CONFIRM_RFID:
-            expected = self.get_parameter("expected_rfid").value
-            if self._last_rfid and (not expected or self._last_rfid == expected):
-                self.get_logger().info(f"确认货物 {self._last_rfid}，顶升取货")
-                self._call_lift(up=True)
-                self._state = State.LIFT_UP
+        elif self._state == State.PICK and self._arm_done():
+            self._say("pick_done")
+            self.get_logger().info("抓取完成，前往投放点")
+            self._station = 0
+            self._mode_pub.publish(UInt8(data=2))
+            self._state = State.LINE_TO_DROP
 
-        elif self._state == State.LIFT_UP and self._lift_done():
-            self.get_logger().info("取货完成，前往投递点")
-            self._goto("deliver_pose", State.NAV_TO_DELIVER)
+        elif self._state == State.LINE_TO_DROP and self._station == self.STATION_DROP:
+            self._mode_pub.publish(UInt8(data=0))
+            self._pending_after_voice = self._start_place
+            self._say("arrive_drop")
+            self._state = State.WAIT_ANNOUNCE
 
-        elif self._state == State.NAV_TO_DELIVER and self._nav_done():
-            if self._state == State.NAV_TO_DELIVER:
-                self.get_logger().info("到达投递点，放下货物")
-                self._call_lift(up=False)
-                self._state = State.LIFT_DOWN
+        elif self._state == State.PLACE and self._arm_done():
+            self._say("place_done")
+            self._say("returning")
+            self.get_logger().info("投放完成，返航")
+            self._station = 0
+            self._mode_pub.publish(UInt8(data=2))
+            self._state = State.LINE_HOME
 
-        elif self._state == State.LIFT_DOWN and self._lift_done():
-            self.get_logger().info("投递完成，返回出发点")
-            self._goto("home_pose", State.NAV_HOME)
-
-        elif self._state == State.NAV_HOME and self._nav_done():
-            if self._state == State.NAV_HOME:
-                self._state = State.DONE
+        elif self._state == State.LINE_HOME and self._station == self.STATION_HOME:
+            self._mode_pub.publish(UInt8(data=0))
+            self._say("home")
+            self._state = State.DONE
 
         if self._state == State.DONE:
-            self.get_logger().info("一次取送闭环完成")
+            self.get_logger().info("一次取货闭环完成")
+            self._state = State.IDLE
+        elif self._state == State.FAILED:
+            self.get_logger().error("任务失败，已急停")
             self._state = State.IDLE
 
 
