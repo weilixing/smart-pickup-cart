@@ -44,9 +44,9 @@ docs/                   # 机械规格、串口协议、接线表、开题底稿
 
 ## 快速开始（OrangePi）
 
+刷机与安装 ROS2 的完整步骤见 **[docs/orangepi_ros2_setup.md](docs/orangepi_ros2_setup.md)**。
+
 ```bash
-sudo apt install ros-humble-robot-state-publisher ros-humble-xacro \
-  python3-serial python3-opencv
 cd ros2_ws && colcon build && source install/setup.bash
 ros2 launch pickup_bringup bringup.launch.py serial_port:=/dev/ttyUSB0
 ```
