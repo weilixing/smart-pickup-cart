@@ -1,0 +1,81 @@
+/*
+ * 复制为 board_hal.c 后，按你的 e2 studio / FSP 配置替换下面的占位调用。
+ * 不要与 board_hal_stub.c 同时加入工程。
+ *
+ * 典型 FSP 资源：
+ * - GPT PWM ×2：左右电机
+ * - GPT 输入捕获或外部中断：编码器
+ * - ADC：8 路灰度
+ * - GPT 输入捕获：超声波回波脉宽
+ * - GPT PWM ×4：舵机
+ * - SCI UART：Host(115200) + Voice(9600)
+ * - 系统滴答：board_millis
+ */
+
+#include "board_hal.h"
+#include "app_config.h"
+
+/* #include "hal_data.h" */
+
+void board_init(void)
+{
+    /* R_GPT_Open / R_ADC_Open / R_SCI_UART_Open ... */
+}
+
+uint32_t board_millis(void)
+{
+    /* return xTaskGetTickCount(); 或自增滴答 */
+    return 0;
+}
+
+void board_delay_ms(uint32_t ms)
+{
+    (void)ms;
+}
+
+void board_motor_set_duty(int16_t left_duty, int16_t right_duty)
+{
+    (void)left_duty;
+    (void)right_duty;
+    /* 映射到 PWM 占空比与 DIR 引脚 */
+}
+
+int32_t board_encoder_left(void) { return 0; }
+int32_t board_encoder_right(void) { return 0; }
+
+void board_line_read(uint16_t out[8])
+{
+    for (int i = 0; i < 8; i++) {
+        out[i] = 0;
+    }
+}
+
+uint16_t board_ultrasonic_front_mm(void) { return 0xFFFF; }
+uint16_t board_ultrasonic_left_mm(void) { return 0xFFFF; }
+uint16_t board_ultrasonic_right_mm(void) { return 0xFFFF; }
+
+void board_servo_set_deg(uint8_t joint, float angle_deg)
+{
+    (void)joint;
+    (void)angle_deg;
+    /* 1.5ms 中位，约 0.5~2.5ms 对应 0~180° */
+}
+
+void board_host_uart_write(const uint8_t *data, uint16_t len)
+{
+    (void)data;
+    (void)len;
+}
+
+int board_host_uart_read(uint8_t *data, uint16_t max_len)
+{
+    (void)data;
+    (void)max_len;
+    return 0;
+}
+
+void board_voice_uart_write(const uint8_t *data, uint16_t len)
+{
+    (void)data;
+    (void)len;
+}
