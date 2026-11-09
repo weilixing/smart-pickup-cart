@@ -27,4 +27,4 @@
 | 0x85 | VOICE_DONE | uint8 index | 播报完成 |
 | 0x86 | IMU | int16 ax + ay + az + gz | 可选 |
 
-对应实现：`firmware/ra8/protocol.h`、`ros2_ws/src/motor_bridge/motor_bridge/protocol.py`。
+对应实现：`firmware/ra8/include/protocol.h`、`ros2_ws/src/motor_bridge/motor_bridge/protocol.py`。
