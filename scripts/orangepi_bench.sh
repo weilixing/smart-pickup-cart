@@ -17,6 +17,8 @@ nproc
 
 echo
 echo "========== 2. ROS2 环境 =========="
+# setup.bash 会读未定义变量，临时关闭 nounset
+set +u
 if [ -f /opt/ros/humble/setup.bash ]; then
   # shellcheck disable=SC1091
   source /opt/ros/humble/setup.bash
@@ -32,6 +34,7 @@ if [ -f "$HOME/smart-pickup-cart/ros2_ws/install/setup.bash" ]; then
   echo "已 source 工作空间"
   ros2 pkg list 2>/dev/null | grep -E 'motor_bridge|pickup_|arm_|voice_|task_' || true
 fi
+set -u
 
 echo
 echo "========== 3. CPU 压测（约 20 秒） =========="
