@@ -45,9 +45,11 @@ docs/                   # 机械规格、串口协议、接线表、开题底稿
 ## 采购与供电（从零开始先看这里）
 
 1. **[docs/power_design.md](docs/power_design.md)** — 供电设计（先买、先测）  
-2. **[docs/bom.md](docs/bom.md)** — 整车采购清单（YDLIDAR X3 + 臂 + 语音）  
+2. **[docs/bom.md](docs/bom.md)** — 整车采购清单（YDLIDAR X3 等）  
 
-当前硬件方向：**雷达导航（不做循迹）+ 四自由度臂 + 语音**；底盘为差速小车 + 雷达立柱。
+算力先摸底：**[docs/orangepi_compute_check.md](docs/orangepi_compute_check.md)**（`scripts/orangepi_bench.sh`）。
+
+当前硬件方向倾向：**YDLIDAR X3 雷达导航**；取货机构（臂/吸盘等）可后定。
 
 ## 快速开始（OrangePi）
 
