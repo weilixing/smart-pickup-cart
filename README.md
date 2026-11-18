@@ -42,6 +42,13 @@ docs/                   # 机械规格、串口协议、接线表、开题底稿
 5. 上层状态机联调完整闭环  
 6. 连续演示与指标测试  
 
+## 采购与供电（从零开始先看这里）
+
+1. **[docs/power_design.md](docs/power_design.md)** — 供电设计（先买、先测）  
+2. **[docs/bom.md](docs/bom.md)** — 整车采购清单（YDLIDAR X3 + 臂 + 语音）  
+
+当前硬件方向：**雷达导航（不做循迹）+ 四自由度臂 + 语音**；底盘为差速小车 + 雷达立柱。
+
 ## 快速开始（OrangePi）
 
 刷机与安装 ROS2 的完整步骤见 **[docs/orangepi_ros2_setup.md](docs/orangepi_ros2_setup.md)**。
