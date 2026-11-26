@@ -23,6 +23,20 @@
 
 注意：之前误以为 LED 在「108/109/110」，实际只有 110（P1.10 = LED3）是对的。
 
+### 串口（来自逐飞 `E1_07_ttl_uart_demo`）
+
+| 用途 | 方向 | 引脚 | 说明 |
+| --- | --- | --- | --- |
+| 用户 TTL UART1 TX | 板子→外设 | **P707** | 接香橙派 USB-TTL 的 **RX** |
+| 用户 TTL UART1 RX | 外设→板子 | **P706** | 接香橙派 USB-TTL 的 **TX** |
+| 调试串口 TX | printf | P209 | J-Link/调试打印，勿与业务混用 |
+| 调试串口 RX | — | P208 | 同上 |
+
+业务链路用 **UART1（P706/P707）**，115200 8N1，与香橙派 **交叉、共地、3.3V**。  
+SYN6288 等模块也走交叉接法；若 UART1 已给 Pi，语音需另开一路 UART 或先共用再拆。
+
+例程宏：`UART_INDEX (UART_1)`，`UART1_TX_P707` / `UART1_RX_P706`。
+
 ## 2. 开发环境
 
 | 项目 | 内容 |
@@ -72,4 +86,9 @@ void new_thread0_entry(void *pvParameters) {
 香橙派侧：ROS2 +（计划）YDLIDAR X3 建图导航。  
 RA8P1 侧：电机 / 里程计 / 取货执行机构 / 语音 / 与 Pi 的串口协议。
 
-**下一步优先：在 `call_flat` 上配置 SCI UART（115200 8N1）↔ 香橙派，跑通协议心跳与 LED 指示。**
+**下一步：UART1 ↔ 香橙派心跳联调**
+
+1. 参考 `firmware/ra8/examples/uart_led_ping.c`，对照 `E1_07_ttl_uart_demo` 改 API 名后贴进 `new_thread0_entry`  
+2. 接线：Pi TX→P706，Pi RX→P707，GND 共地  
+3. 香橙派：`python3 scripts/uart_ping_test.py /dev/ttyUSB0`  
+4. 期望：RA8 LED3 闪烁，PC/Pi 侧打印收到 ACK `aa5590...`
