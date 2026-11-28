@@ -34,8 +34,7 @@
  *        只改 SCICLK 不够，还要在运行时用实际 SCICLK 重算波特率，见下方
  *        R_SCI_B_UART_BaudCalculate + R_SCI_B_UART_BaudSet。
  *
- * 【坑4】LED3(P1.10) 实为高电平点亮（拉高亮/拉低灭），本文件 led_pulse 里 LOW/HIGH
- *        按"低电平点亮"写的，方向反了；不影响串口，只是常亮/闪灭表现相反。
+ * 【坑4】LED3(P1.10) 实测为高电平点亮（拉高亮/拉低灭）；led_pulse 已按此写。
  *
  * 本文件替换 call_flat 的 new_thread0_entry.c 后：Build → Debug → Resume(F8)。
  * 上电先快闪 3 下；收心跳再闪并回 ACK。
@@ -92,11 +91,12 @@ static void send_ack(uint8_t got_cmd)
     (void)R_SCI_B_UART_Write(&g_uart0_ctrl, f, sizeof(f));
 }
 
+/* LED3：实测高电平点亮（与早期笔记「低电平亮」相反） */
 static void led_pulse(void)
 {
-    R_BSP_PinWrite(LED3, BSP_IO_LEVEL_LOW);
-    vTaskDelay(pdMS_TO_TICKS(80));
     R_BSP_PinWrite(LED3, BSP_IO_LEVEL_HIGH);
+    vTaskDelay(pdMS_TO_TICKS(80));
+    R_BSP_PinWrite(LED3, BSP_IO_LEVEL_LOW);
 }
 
 static int parse_frame(uint8_t b, uint8_t *out_cmd)
@@ -151,7 +151,7 @@ void new_thread0_entry(void *pvParameters)
     FSP_PARAMETER_NOT_USED(pvParameters);
 
     R_BSP_PinAccessEnable();
-    R_BSP_PinWrite(LED3, BSP_IO_LEVEL_HIGH);
+    R_BSP_PinWrite(LED3, BSP_IO_LEVEL_LOW); /* 先灭 */
 
     (void)R_SCI_B_UART_Open(&g_uart0_ctrl, &g_uart0_cfg);
 
