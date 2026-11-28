@@ -1,23 +1,44 @@
 /*
- * 双板串口连通测试（RA8 下位机，e2 studio + FSP 6.6.0）
+ * 双板串口连通测试（RA8 下位机，e2 studio + FSP 6.6.0，已跑通）
  *
  * 功能：收到 OrangePi 心跳帧 AA 55 03 00 03 → 回 ACK AA 55 90 01 03 92，并闪 LED3。
  * 上位机：scripts/uart_ping_test.py /dev/ttyAMA2
+ * 实测结果：10/10 心跳全部收到 ACK，双板串口打通。
  *
  * ── FSP 配置要点 ──────────────────────────────────────────────────────────
- * 1. 器件 RA8P1（R7JA8P1KRLSAJ），Flat（非 TrustZone）。
- * 2. Stacks → "UART (r_sci_b_uart)"（不是 r_sci_uart）：
+ * 1. 器件 RA8P1（R7JA8P1KRLSAJ），工程类型 Flat（非 TrustZone）。
+ * 2. Stacks → 添加 "UART (r_sci_b_uart)"，注意是 r_sci_b_uart（不是 r_sci_uart）：
  *      - Channel = 1（SCI1）
  *      - Baud 115200, 8N1
  *      - Callback = uart0_callback
- *      - 实例名若是 g_uart0，下面保持 g_uart0_*；若 Generate 成 g_uart1，全文替换。
  * 3. Pins：RXD1 = P706，TXD1 = P707。
- * 4. Clocks：SCICLK 必须 HOCO（勿 Disabled）。
- * 5. 香橙派侧用 UART7：Pin7=TX → P706，Pin29=RX ← P707，GND 共地；设备 /dev/ttyAMA2。
+ * 4. Clocks：SCICLK 必须选 HOCO（48MHz）。
+ * 5. 香橙派侧 UART7：Pin7=TX → P706，Pin29=RX ← P707，GND 共地；设备 /dev/ttyAMA2。
  *    （UART2 / ttyAMA1 在该板上环回不通，不要用。）
  *
+ * ── 踩坑记录（为什么之前一直收不到 ACK）────────────────────────────────
+ * 【坑1】驱动名是 r_sci_b_uart，不是 r_sci_uart。
+ *        API 是 R_SCI_B_UART_Open/Read/Write，写成 R_SCI_UART_* 会链接报错。
+ *
+ * 【坑2】SCICLK 时钟源默认是 Disabled，UART 没时钟。
+ *        Generate 会报 "Requires SCISPICLK/SCICLK to be enabled"。
+ *        且 Custom User Board 下 Clocks 界面里 SCICLK 是锁死的、点不动；
+ *        手动改 .secure_xml 成 hoco 也不会被 Generate 采用（Generate 仍按设备默认 Disabled 生成）。
+ *        临时办法：直接改生成的 ra_gen/bsp_clock_cfg.h：
+ *            #define BSP_CFG_SCICLK_SOURCE (BSP_CLOCKS_SOURCE_CLOCK_HOCO)
+ *        然后强制重编 bsp_clocks.c。注意：再点 Generate/Clean 会还原，要重改。
+ *
+ * 【坑3】关键：波特率参数是 100% 误差。
+ *        因为 Generate 时 SCICLK=Disabled（0Hz），FSP 生成的 g_uart0_baud_setting 是错的
+ *        （hal_data.c 里有注释 "Baud rate calculated with 100.000% error"）。
+ *        只改 SCICLK 不够，还要在运行时用实际 SCICLK 重算波特率，见下方
+ *        R_SCI_B_UART_BaudCalculate + R_SCI_B_UART_BaudSet。
+ *
+ * 【坑4】LED3(P1.10) 实为高电平点亮（拉高亮/拉低灭），本文件 led_pulse 里 LOW/HIGH
+ *        按"低电平点亮"写的，方向反了；不影响串口，只是常亮/闪灭表现相反。
+ *
  * 本文件替换 call_flat 的 new_thread0_entry.c 后：Build → Debug → Resume(F8)。
- * 上电应先快闪 3 下；收心跳再闪并回 ACK。
+ * 上电先快闪 3 下；收心跳再闪并回 ACK。
  */
 
 #include "new_thread0.h"
@@ -133,6 +154,14 @@ void new_thread0_entry(void *pvParameters)
     R_BSP_PinWrite(LED3, BSP_IO_LEVEL_HIGH);
 
     (void)R_SCI_B_UART_Open(&g_uart0_ctrl, &g_uart0_cfg);
+
+    /* 运行时重算并应用波特率：静态配置是 SCICLK=Disabled 时生成的（100% 误差），必须重算 */
+    {
+        sci_b_baud_setting_t baud;
+        (void)R_SCI_B_UART_BaudCalculate(115200, false, 1500, &baud);
+        (void)R_SCI_B_UART_BaudSet(&g_uart0_ctrl, &baud);
+    }
+
     (void)R_SCI_B_UART_Read(&g_uart0_ctrl, &s_rx_byte, 1u);
 
     /* 上电快闪 3 次：确认已烧到本联调固件（不是旧慢闪程序） */
