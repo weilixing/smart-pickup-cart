@@ -86,9 +86,10 @@ void new_thread0_entry(void *pvParameters) {
 香橙派侧：ROS2 +（计划）YDLIDAR X3 建图导航。  
 RA8P1 侧：电机 / 里程计 / 取货执行机构 / 语音 / 与 Pi 的串口协议。
 
-**下一步：UART1 ↔ 香橙派心跳联调**
+**UART1 ↔ 香橙派心跳联调（当前）**
 
-1. 参考 `firmware/ra8/examples/uart_led_ping.c`，对照 `E1_07_ttl_uart_demo` 改 API 名后贴进 `new_thread0_entry`  
-2. 接线：Pi TX→P706，Pi RX→P707，GND 共地  
-3. 香橙派：`python3 scripts/uart_ping_test.py /dev/ttyUSB0`  
-4. 期望：RA8 LED3 闪烁，PC/Pi 侧打印收到 ACK `aa5590...`
+1. FSP：`r_sci_b_uart` Channel=1，RXD1=P706，TXD1=P707，SCICLK=HOCO，回调 `uart0_callback`  
+2. 用仓库 `firmware/ra8/examples/uart_led_ping.c` 替换 `new_thread0_entry.c` → Build → Resume  
+3. 上电应 **LED3 快闪 3 下**（确认是联调固件）  
+4. 接线：香橙派 **Pin7→P706，Pin29←P707，GND**（用 UART7 / `ttyAMA2`，不要用 Pin11/36）  
+5. `python3 scripts/uart_ping_test.py /dev/ttyAMA2` → 灯再闪 + 终端 `收到 ACK`

@@ -11,17 +11,21 @@
 
 详见 `docs/power_design.md`。
 
-## OrangePi AIpro ↔ 逐飞 RA8P1（用户 UART1）
+## OrangePi AIpro ↔ 逐飞 RA8P1（用户 UART1 / SCI1）
 
-| OrangePi 侧 | RA8P1 侧 | 说明 |
-| --- | --- | --- |
-| USB-TTL TX | **P706（UART1 RX）** | 交叉 |
-| USB-TTL RX | **P707（UART1 TX）** | 交叉 |
-| GND | GND | **必须共地** |
-| — | P208/P209 | 调试串口，给 printf，不要接 Pi |
+实测本机 **UART2（ttyAMA1 / Pin11·36）环回不通**，请用 **UART7**：
 
-电平 **3.3V TTL**，波特率 **115200 8N1**。协议见 `docs/serial_protocol.md`。  
-冒烟：`scripts/uart_ping_test.py`；固件示例：`firmware/ra8/examples/uart_led_ping.c`。
+| OrangePi 侧 | 40Pin | RA8P1 侧 | 说明 |
+| --- | --- | --- | --- |
+| UART7 TX | **Pin7** UTXD7 | → **P706**（SCI1 RX） | 交叉 |
+| UART7 RX | **Pin29** URXD7 | ← **P707**（SCI1 TX） | 交叉 |
+| GND | Pin6/9/14… | → GND | **必须共地** |
+| — | 8 / 10 | 勿接 | 调试 UART0 |
+| — | — | P208/P209 | RA8 调试口，勿接 Pi |
+
+电平 **3.3V TTL**，**115200 8N1**。设备节点：`/dev/ttyAMA2`。  
+冒烟：`python3 scripts/uart_ping_test.py /dev/ttyAMA2`  
+固件：`firmware/ra8/examples/uart_led_ping.c`（替换 `new_thread0_entry.c`）。
 
 ## RA8 ↔ 底盘（后续）
 
